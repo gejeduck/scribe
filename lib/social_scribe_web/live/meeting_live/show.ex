@@ -8,7 +8,8 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
   alias SocialScribe.Accounts
-  alias SocialScribe.HubspotApiBehaviour, as: HubspotApi
+  alias SocialScribe.CrmApi
+  alias SocialScribe.CrmProvider
   alias SocialScribe.HubspotSuggestions
 
   @impl true
@@ -30,6 +31,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
       {:error, socket}
     else
+      crm_credentials = Accounts.list_user_crm_credentials(socket.assigns.current_user.id)
       hubspot_credential = Accounts.get_user_hubspot_credential(socket.assigns.current_user.id)
 
       socket =
@@ -38,6 +40,9 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         |> assign(:meeting, meeting)
         |> assign(:automation_results, automation_results)
         |> assign(:user_has_automations, user_has_automations)
+        |> assign(:crm_credentials, crm_credentials)
+        |> assign(:crm_credential, nil)
+        |> assign(:crm_provider, nil)
         |> assign(:hubspot_credential, hubspot_credential)
         |> assign(
           :follow_up_email_form,
@@ -48,6 +53,18 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
       {:ok, socket}
     end
+  end
+
+  @impl true
+  def handle_params(%{"provider" => provider}, _uri, socket) do
+    crm_credential = Accounts.get_user_crm_credential(socket.assigns.current_user.id, provider)
+
+    socket =
+      socket
+      |> assign(:crm_credential, crm_credential)
+      |> assign(:crm_provider, provider)
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -65,6 +82,21 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   @impl true
   def handle_params(_params, _uri, socket) do
+    socket =
+      case socket.assigns[:live_action] do
+        :hubspot ->
+          if hubspot_credential = socket.assigns[:hubspot_credential] do
+            socket
+            |> assign(:crm_credential, hubspot_credential)
+            |> assign(:crm_provider, "hubspot")
+          else
+            socket
+          end
+
+        _ ->
+          socket
+      end
+
     {:noreply, socket}
   end
 
@@ -79,7 +111,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   @impl true
   def handle_info({:hubspot_search, query, credential}, socket) do
-    case HubspotApi.search_contacts(credential, query) do
+    case CrmApi.search_contacts(credential, query) do
       {:ok, contacts} ->
         send_update(SocialScribeWeb.MeetingLive.HubspotModalComponent,
           id: "hubspot-modal",
@@ -124,11 +156,11 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   @impl true
   def handle_info({:apply_hubspot_updates, updates, contact, credential}, socket) do
-    case HubspotApi.update_contact(credential, contact.id, updates) do
+    case CrmApi.update_contact(credential, contact.id, updates) do
       {:ok, _updated_contact} ->
         socket =
           socket
-          |> put_flash(:info, "Successfully updated #{map_size(updates)} field(s) in HubSpot")
+          |> put_flash(:info, "Successfully updated #{map_size(updates)} field(s) in CRM")
           |> push_patch(to: ~p"/dashboard/meetings/#{socket.assigns.meeting}")
 
         {:noreply, socket}

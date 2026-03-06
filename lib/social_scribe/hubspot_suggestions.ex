@@ -5,7 +5,7 @@ defmodule SocialScribe.HubspotSuggestions do
   """
 
   alias SocialScribe.AIContentGeneratorApi
-  alias SocialScribe.HubspotApi
+  alias SocialScribe.CrmApi
   alias SocialScribe.Accounts.UserCredential
 
   @field_labels %{
@@ -38,7 +38,7 @@ defmodule SocialScribe.HubspotSuggestions do
   - apply: boolean indicating whether to apply this update (default false)
   """
   def generate_suggestions(%UserCredential{} = credential, contact_id, meeting) do
-    with {:ok, contact} <- HubspotApi.get_contact(credential, contact_id),
+    with {:ok, contact} <- CrmApi.get_contact(credential, contact_id),
          {:ok, ai_suggestions} <- AIContentGeneratorApi.generate_hubspot_suggestions(meeting) do
       suggestions =
         ai_suggestions

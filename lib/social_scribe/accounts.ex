@@ -9,6 +9,7 @@ defmodule SocialScribe.Accounts do
   alias Ueberauth.Auth
 
   alias SocialScribe.Accounts.{User, UserToken, UserCredential}
+  alias SocialScribe.CrmProvider
 
   ## Database getters
 
@@ -314,6 +315,35 @@ defmodule SocialScribe.Accounts do
   """
   def get_user_hubspot_credential(user_id) do
     Repo.get_by(UserCredential, user_id: user_id, provider: "hubspot")
+  end
+
+  @doc """
+  Lists the user's CRM credentials for all connected CRM providers.
+
+  Returns one credential per provider (the first for each). Use this for
+  multi-provider CRM support (HubSpot, Salesforce, etc.).
+  """
+  def list_user_crm_credentials(user_id) when is_integer(user_id) do
+    providers = CrmProvider.known_providers()
+
+    from(c in UserCredential,
+      where: c.user_id == ^user_id and c.provider in ^providers,
+      order_by: [asc: c.provider]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets a CRM credential for a user by provider.
+  Returns the first credential for that provider if multiple exist.
+  """
+  def get_user_crm_credential(user_id, provider)
+      when is_integer(user_id) and is_binary(provider) do
+    if CrmProvider.crm_provider?(provider) do
+      Repo.get_by(UserCredential, user_id: user_id, provider: provider)
+    else
+      nil
+    end
   end
 
   defp get_user_by_oauth_uid(provider, uid) do

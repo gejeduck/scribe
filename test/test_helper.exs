@@ -20,3 +20,4 @@ Application.put_env(
 )
 
 Application.put_env(:social_scribe, :hubspot_api, SocialScribe.HubspotApiMock)
+Application.put_env(:social_scribe, :crm_provider_overrides, %{"hubspot" => SocialScribe.HubspotApiMock})

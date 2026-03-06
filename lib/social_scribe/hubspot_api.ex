@@ -2,9 +2,11 @@ defmodule SocialScribe.HubspotApi do
   @moduledoc """
   HubSpot CRM API client for contacts operations.
   Implements automatic token refresh on 401/expired token errors.
+  Implements CrmApiBehaviour for multi-provider CRM support.
   """
 
   @behaviour SocialScribe.HubspotApiBehaviour
+  @behaviour SocialScribe.CrmApiBehaviour
 
   alias SocialScribe.Accounts.UserCredential
   alias SocialScribe.HubspotTokenRefresher
@@ -103,7 +105,7 @@ defmodule SocialScribe.HubspotApi do
   def update_contact(%UserCredential{} = credential, contact_id, updates)
       when is_map(updates) do
     with_token_refresh(credential, fn cred ->
-      body = %{properties: updates}
+      body = %{properties: canonical_to_hubspot_properties(updates)}
 
       case Tesla.patch(client(cred.token), "/crm/v3/objects/contacts/#{contact_id}", body) do
         {:ok, %Tesla.Env{status: 200, body: body}} ->
@@ -139,6 +141,15 @@ defmodule SocialScribe.HubspotApi do
     else
       {:ok, :no_updates}
     end
+  end
+
+  # Maps canonical CRM field names to HubSpot property names
+  defp canonical_to_hubspot_properties(updates) when is_map(updates) do
+    Enum.reduce(updates, %{}, fn
+      {"linkedin_url", v}, acc -> Map.put(acc, "hs_linkedin_url", v)
+      {"twitter_handle", v}, acc -> Map.put(acc, "twitterhandle", v)
+      {k, v}, acc -> Map.put(acc, to_string(k), v)
+    end)
   end
 
   # Format a HubSpot contact response into a cleaner structure

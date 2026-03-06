@@ -26,6 +26,13 @@ defmodule SocialScribeWeb.HubspotModalTest do
       assert has_element?(view, "h2", "Update in HubSpot")
     end
 
+    test "renders modal when navigating to crm/hubspot route", %{conn: conn, meeting: meeting} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/crm/hubspot")
+
+      assert has_element?(view, "#hubspot-modal-wrapper")
+      assert has_element?(view, "h2", "Update in HubSpot")
+    end
+
     test "displays contact search input", %{conn: conn, meeting: meeting} do
       {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
 
@@ -67,7 +74,7 @@ defmodule SocialScribeWeb.HubspotModalTest do
       }
     end
 
-    test "does not show HubSpot section when no credential", %{conn: conn, meeting: meeting} do
+    test "does not show CRM section when no credential", %{conn: conn, meeting: meeting} do
       {:ok, _view, html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}")
 
       refute html =~ "HubSpot Integration"

@@ -3,15 +3,18 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
 
   import SocialScribeWeb.ModalComponents
 
+  alias SocialScribe.CrmProvider
+
   @impl true
   def render(assigns) do
     assigns = assign(assigns, :patch, ~p"/dashboard/meetings/#{assigns.meeting}")
     assigns = assign_new(assigns, :modal_id, fn -> "hubspot-modal-wrapper" end)
+    assigns = assign(assigns, :crm_label, CrmProvider.label_for(assigns.credential.provider))
 
     ~H"""
     <div class="space-y-6">
       <div>
-        <h2 id={"#{@modal_id}-title"} class="text-xl font-medium tracking-tight text-slate-900">Update in HubSpot</h2>
+        <h2 id={"#{@modal_id}-title"} class="text-xl font-medium tracking-tight text-slate-900">Update in {@crm_label}</h2>
         <p id={"#{@modal_id}-description"} class="mt-2 text-base font-light leading-7 text-slate-500">
           Here are suggested updates to sync with your integrations based on this
           <span class="block">meeting</span>
@@ -34,6 +37,7 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
           loading={@loading}
           myself={@myself}
           patch={@patch}
+          crm_label={@crm_label}
         />
       <% end %>
     </div>
@@ -44,6 +48,7 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
   attr :loading, :boolean, required: true
   attr :myself, :any, required: true
   attr :patch, :string, required: true
+  attr :crm_label, :string, default: "CRM"
 
   defp suggestions_section(assigns) do
     assigns = assign(assigns, :selected_count, Enum.count(assigns.suggestions, & &1.apply))
@@ -69,7 +74,7 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
 
             <.modal_footer
               cancel_patch={@patch}
-              submit_text="Update HubSpot"
+              submit_text={"Update #{@crm_label}"}
               submit_class="bg-hubspot-button hover:bg-hubspot-button-hover"
               disabled={@selected_count == 0}
               loading={@loading}
