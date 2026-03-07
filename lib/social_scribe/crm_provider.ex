@@ -10,6 +10,10 @@ defmodule SocialScribe.CrmProvider do
     "hubspot" => %{
       module: SocialScribe.HubspotApi,
       label: "HubSpot"
+    },
+    "salesforce" => %{
+      module: nil,
+      label: "Salesforce"
     }
   }
 
@@ -22,10 +26,10 @@ defmodule SocialScribe.CrmProvider do
 
     case Map.get(overrides, provider) do
       nil ->
-        case Map.get(@providers, provider) do
-          %{module: module} -> module
-          nil -> nil
-        end
+    case Map.get(@providers, provider) do
+      %{module: module} when not is_nil(module) -> module
+      _ -> nil
+    end
 
       override_module ->
         override_module

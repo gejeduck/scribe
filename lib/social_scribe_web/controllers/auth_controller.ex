@@ -98,6 +98,44 @@ defmodule SocialScribeWeb.AuthController do
   end
 
   def callback(%{assigns: %{ueberauth_auth: auth, current_user: user}} = conn, %{
+        "provider" => "salesforce"
+      })
+      when not is_nil(user) do
+    Logger.info("Salesforce OAuth")
+    Logger.info(inspect(auth))
+
+    user_id = to_string(auth.uid)
+
+    credential_attrs = %{
+      user_id: user.id,
+      provider: "salesforce",
+      uid: user_id,
+      token: auth.credentials.token,
+      refresh_token: auth.credentials.refresh_token,
+      expires_at:
+        (auth.credentials.expires_at && DateTime.from_unix!(auth.credentials.expires_at)) ||
+          DateTime.add(DateTime.utc_now(), 7200, :second),
+      email: auth.info.email || get_in(auth.extra.raw_info, [:user, "preferred_username"])
+    }
+
+    case Accounts.find_or_create_crm_credential(user, credential_attrs) do
+      {:ok, _credential} ->
+        Logger.info("Salesforce account connected for user #{user.id}, user_id: #{user_id}")
+
+        conn
+        |> put_flash(:info, "Salesforce account connected successfully!")
+        |> redirect(to: ~p"/dashboard/settings")
+
+      {:error, reason} ->
+        Logger.error("Failed to save Salesforce credential: #{inspect(reason)}")
+
+        conn
+        |> put_flash(:error, "Could not connect Salesforce account.")
+        |> redirect(to: ~p"/dashboard/settings")
+    end
+  end
+
+  def callback(%{assigns: %{ueberauth_auth: auth, current_user: user}} = conn, %{
         "provider" => "hubspot"
       })
       when not is_nil(user) do
@@ -133,6 +171,16 @@ defmodule SocialScribeWeb.AuthController do
         |> put_flash(:error, "Could not connect HubSpot account.")
         |> redirect(to: ~p"/dashboard/settings")
     end
+  end
+
+  # User denied or OAuth failed while adding an account (already logged in)
+  def callback(%{assigns: %{ueberauth_failure: _failure, current_user: _user}} = conn, %{
+        "provider" => provider
+      })
+      when provider in ["salesforce", "hubspot", "google", "linkedin", "facebook"] do
+    conn
+    |> put_flash(:info, "Connection cancelled.")
+    |> redirect(to: ~p"/dashboard/settings")
   end
 
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do

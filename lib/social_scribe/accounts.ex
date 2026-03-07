@@ -297,6 +297,23 @@ defmodule SocialScribe.Accounts do
   end
 
   @doc """
+  Finds or creates a CRM credential for a user.
+  Works for any CRM provider (HubSpot, Salesforce, etc.).
+  """
+  def find_or_create_crm_credential(user, attrs) when is_map(attrs) do
+    provider = attrs[:provider] || attrs["provider"]
+
+    if CrmProvider.crm_provider?(provider) do
+      case get_user_credential(user, provider, attrs[:uid] || attrs["uid"]) do
+        nil -> create_user_credential(attrs)
+        %UserCredential{} = credential -> update_user_credential(credential, attrs)
+      end
+    else
+      {:error, {:unsupported_provider, provider}}
+    end
+  end
+
+  @doc """
   Finds or creates a HubSpot credential for a user.
   HubSpot uses a single credential per hub_id (account).
   """

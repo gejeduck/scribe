@@ -3,6 +3,7 @@ defmodule SocialScribeWeb.UserSettingsLive do
 
   alias SocialScribe.Accounts
   alias SocialScribe.Bots
+  alias SocialScribe.CrmProvider
 
   @impl true
   def mount(_params, _session, socket) do
@@ -14,7 +15,12 @@ defmodule SocialScribeWeb.UserSettingsLive do
 
     facebook_accounts = Accounts.list_user_credentials(current_user, provider: "facebook")
 
-    hubspot_accounts = Accounts.list_user_credentials(current_user, provider: "hubspot")
+    crm_providers =
+      CrmProvider.known_providers()
+      |> Enum.map(fn provider ->
+        accounts = Accounts.list_user_credentials(current_user, provider: provider)
+        %{provider: provider, label: CrmProvider.label_for(provider), accounts: accounts}
+      end)
 
     user_bot_preference =
       Bots.get_user_bot_preference(current_user.id) || %Bots.UserBotPreference{}
@@ -27,7 +33,7 @@ defmodule SocialScribeWeb.UserSettingsLive do
       |> assign(:google_accounts, google_accounts)
       |> assign(:linkedin_accounts, linkedin_accounts)
       |> assign(:facebook_accounts, facebook_accounts)
-      |> assign(:hubspot_accounts, hubspot_accounts)
+      |> assign(:crm_providers, crm_providers)
       |> assign(:user_bot_preference, user_bot_preference)
       |> assign(:user_bot_preference_form, to_form(changeset))
 
@@ -102,6 +108,29 @@ defmodule SocialScribeWeb.UserSettingsLive do
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset, action: :validate))}
     end
+  end
+
+  attr :provider, :string, required: true
+
+  defp crm_provider_icon(assigns) do
+    ~H"""
+    <span class="-ml-1 mr-3 h-5 w-5 inline-block" aria-hidden="true">
+      <%= case @provider do %>
+        <% "hubspot" -> %>
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18.164 7.93V5.084a2.198 2.198 0 001.267-1.984v-.066A2.2 2.2 0 0017.231.834h-.066a2.2 2.2 0 00-2.2 2.2v.066c0 .873.517 1.626 1.267 1.984V7.93a6.152 6.152 0 00-3.267 1.643l-6.6-5.133a2.726 2.726 0 00.067-.582A2.726 2.726 0 003.706 1.13a2.726 2.726 0 00-2.726 2.727 2.726 2.726 0 002.726 2.727c.483 0 .938-.126 1.333-.347l6.486 5.047a6.195 6.195 0 00-.556 2.572 6.18 6.18 0 00.56 2.572l-1.57 1.223a2.457 2.457 0 00-1.49-.504 2.468 2.468 0 00-2.468 2.468 2.468 2.468 0 002.468 2.468 2.468 2.468 0 002.468-2.468c0-.29-.05-.568-.142-.826l1.558-1.213a6.2 6.2 0 003.812 1.312 6.2 6.2 0 006.199-6.2 6.2 6.2 0 00-4.2-5.856zm-4.2 9.193a3.337 3.337 0 110-6.674 3.337 3.337 0 010 6.674z"/>
+          </svg>
+        <% "salesforce" -> %>
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+          </svg>
+        <% _ -> %>
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2h6v2H7V4zm0 4h6v2H7V8zm0 4h6v2H7v-2z" clip-rule="evenodd"/>
+          </svg>
+      <% end %>
+    </span>
+    """
   end
 
   defp create_or_update_user_bot_preference(bot_preference, params) do

@@ -129,6 +129,9 @@ Follow these steps to get SocialScribe running on your local machine.
         * `HUBSPOT_CLIENT_ID`: Your HubSpot App Client ID.
         * `HUBSPOT_CLIENT_SECRET`: Your HubSpot App Client Secret.
         * `HUBSPOT_REDIRECT_URI`: `"http://localhost:4000/auth/hubspot/callback"`
+        * `SALESFORCE_CLIENT_ID`: Your Salesforce Connected App Consumer Key.
+        * `SALESFORCE_CLIENT_SECRET`: Your Salesforce Connected App Consumer Secret.
+        * `SALESFORCE_SITE`: (optional) `"https://login.salesforce.com"` for production, `"https://test.salesforce.com"` for sandbox.
 
 4.  **Start the Phoenix Server:**
     ```bash
@@ -184,6 +187,19 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 * **Selective Updates:** Checkbox per field allows selective updates; "Update HubSpot" button disabled until at least one field selected
 * **Form Submission:** Batch-updates selected contact properties via `HubspotApi.update_contact`
 * **Click-away Handler:** Closes dropdown without clearing selection
+
+---
+
+## 🔗 Salesforce Integration
+
+### Salesforce OAuth (Connected App)
+
+* **Custom Ueberauth Strategy:** Implemented in `lib/ueberauth/strategy/salesforce.ex`
+* **OAuth 2.0 Web Server Flow:** Uses Salesforce's `/services/oauth2/authorize` and `/services/oauth2/token` endpoints
+* **Production vs Sandbox:** Set `SALESFORCE_SITE` to `https://login.salesforce.com` (default) or `https://test.salesforce.com` for sandbox
+* **Connected App Setup:** Create a Connected App in Salesforce Setup → App Manager. Enable OAuth, add callback URL (e.g. `http://localhost:4000/auth/salesforce/callback`), and select scopes: `api`, `id`, `refresh_token`
+* **Credential Storage:** Credentials stored in `user_credentials` table with `provider: "salesforce"`
+* **API Integration:** Salesforce CRM API integration (contact search/update) is planned; OAuth connection is ready for future use
 
 ---
 
