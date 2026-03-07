@@ -151,6 +151,7 @@ defmodule Ueberauth.Strategy.Salesforce do
 
     case Ueberauth.Strategy.Salesforce.OAuth.get_userinfo(token.access_token, instance_url) do
       {:ok, user} ->
+        user = Map.put(user, "instance_url", instance_url)
         put_private(conn, :salesforce_user, user)
 
       {:error, reason} ->

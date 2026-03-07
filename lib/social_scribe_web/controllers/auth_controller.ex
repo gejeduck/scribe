@@ -115,7 +115,8 @@ defmodule SocialScribeWeb.AuthController do
       expires_at:
         (auth.credentials.expires_at && DateTime.from_unix!(auth.credentials.expires_at)) ||
           DateTime.add(DateTime.utc_now(), 7200, :second),
-      email: auth.info.email || get_in(auth.extra.raw_info, [:user, "preferred_username"])
+      email: auth.info.email || get_in(auth.extra.raw_info, [:user, "preferred_username"]),
+      instance_url: auth.extra.raw_info[:instance_url]
     }
 
     case Accounts.find_or_create_crm_credential(user, credential_attrs) do

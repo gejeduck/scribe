@@ -12,7 +12,7 @@ defmodule SocialScribe.CrmProvider do
       label: "HubSpot"
     },
     "salesforce" => %{
-      module: nil,
+      module: SocialScribe.SalesforceApi,
       label: "Salesforce"
     }
   }
