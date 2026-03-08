@@ -331,6 +331,9 @@ defmodule SocialScribeWeb.ModalComponents do
   """
   attr :suggestion, :map, required: true
   attr :class, :string, default: nil
+  attr :field_error, :string, default: nil
+  attr :expanded, :boolean, default: true
+  attr :target, :any, default: nil
 
   def suggestion_card(assigns) do
     ~H"""
@@ -358,61 +361,69 @@ defmodule SocialScribeWeb.ModalComponents do
           >
             1 update selected
           </span>
-          <button type="button" class="text-xs text-hubspot-hide hover:text-hubspot-hide-hover font-medium">
-            Hide details
+          <button
+            type="button"
+            phx-click="toggle_suggestion_details"
+            phx-value-field={@suggestion.field}
+            phx-target={@target}
+            class="text-xs text-hubspot-hide hover:text-hubspot-hide-hover font-medium"
+          >
+            <%= if @expanded, do: "Hide details", else: "Show details" %>
           </button>
         </div>
       </div>
 
-      <div class="mt-2 pl-8">
-        <div class="text-sm font-medium text-slate-700 leading-5 ml-1">{@suggestion.label}</div>
+      <div class={["mt-2", if(!@expanded, do: "hidden", else: "")]}>
+        <div class="mt-2">
+          <div class="grid grid-cols-[1fr_32px_1fr] items-start gap-6">
+            <div>
+              <p class="text-xs font-medium text-slate-500 mb-1">Current</p>
+              <div class="flex items-center gap-2">
+                <input
+                  id={"suggestion-apply-#{@suggestion.field}"}
+                  type="checkbox"
+                  name={"apply[#{@suggestion.field}]"}
+                  value="1"
+                  checked={@suggestion.apply}
+                  class="h-4 w-4 flex-shrink-0 rounded-[3px] border-slate-300 text-hubspot-checkbox accent-hubspot-checkbox focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  readonly
+                  value={@suggestion.current_value || ""}
+                  placeholder="No existing value"
+                  class={[
+                    "block flex-1 min-w-0 shadow-sm text-sm bg-slate-50 border border-slate-200 rounded-[7px] py-1.5 px-2",
+                    if(@suggestion.apply && @suggestion.current_value && @suggestion.current_value != "", do: "line-through text-gray-500", else: "text-gray-400")
+                  ]}
+                />
+              </div>
+            </div>
 
-        <div class="relative mt-2">
-          <input
-            id={"suggestion-apply-#{@suggestion.field}"}
-            type="checkbox"
-            name={"apply[#{@suggestion.field}]"}
-            value="1"
-            checked={@suggestion.apply}
-            class="absolute -left-8 top-1/2 -translate-y-1/2 h-4 w-4 rounded-[3px] border-slate-300 text-hubspot-checkbox accent-hubspot-checkbox focus:ring-0 focus:ring-offset-0 cursor-pointer"
-          />
-
-          <div class="grid grid-cols-[1fr_32px_1fr] items-center gap-6">
-            <input
-              type="text"
-              readonly
-              value={@suggestion.current_value || ""}
-              placeholder="No existing value"
-              class={[
-                "block w-full shadow-sm text-sm bg-white border border-gray-300 rounded-[7px] py-1.5 px-2",
-                if(@suggestion.current_value && @suggestion.current_value != "", do: "line-through text-gray-500", else: "text-gray-400")
-              ]}
-            />
-
-            <div class="w-8 flex justify-center text-hubspot-arrow">
+            <div class="w-8 flex justify-center pt-6 text-slate-400">
               <.icon name="hero-arrow-long-right" class="h-7 w-7" />
             </div>
 
-            <input
-              type="text"
-              name={"values[#{@suggestion.field}]"}
-              value={@suggestion.new_value}
-              class="block w-full shadow-sm text-sm text-slate-900 bg-white border border-hubspot-input rounded-[7px] py-1.5 px-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            <div>
+              <p class="text-xs font-medium text-slate-500 mb-1">Proposed</p>
+              <input
+                type="text"
+                name={"values[#{@suggestion.field}]"}
+                value={@suggestion.new_value}
+                class={[
+                  "block w-full shadow-sm text-sm rounded-[7px] py-1.5 px-2 focus:ring-blue-500 focus:border-blue-500",
+                  if(@field_error, do: "border-red-500 bg-red-50 text-slate-900", else: "border border-hubspot-input bg-white text-slate-900")
+                ]}
+              />
+              <p :if={@field_error} class="mt-1 text-xs text-red-600">{@field_error}</p>
+            </div>
           </div>
         </div>
 
-        <div class="mt-3 grid grid-cols-[1fr_32px_1fr] items-start gap-6">
-          <button type="button" class="text-xs text-hubspot-link hover:text-hubspot-link-hover font-medium justify-self-start">
+        <div class="mt-3 pl-0">
+          <button type="button" class="text-xs text-hubspot-link hover:text-hubspot-link-hover font-medium">
             Update mapping
           </button>
-          <span></span>
-          <span :if={@suggestion[:timestamp]} class="text-xs text-slate-500 justify-self-start">Found in transcript<span
-              class="text-hubspot-link hover:underline cursor-help"
-              title={@suggestion[:context]}
-            >
-              ({@suggestion[:timestamp]})
-            </span></span>
         </div>
       </div>
     </div>

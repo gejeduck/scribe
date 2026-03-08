@@ -6,7 +6,7 @@ defmodule SocialScribe.AIContentGenerator do
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
 
-  @gemini_model "gemini-2.0-flash-lite"
+  @gemini_model "gemini-2.5-flash"
   @gemini_api_base_url "https://generativelanguage.googleapis.com/v1beta/models"
 
   @impl SocialScribe.AIContentGeneratorApi
@@ -48,10 +48,9 @@ defmodule SocialScribe.AIContentGenerator do
   @impl SocialScribe.AIContentGeneratorApi
   def generate_hubspot_suggestions(meeting) do
     case Meetings.generate_prompt_for_meeting(meeting) do
-      {:error, reason} ->
-        {:error, reason}
-
       {:ok, meeting_prompt} ->
+        # Skip AI call when no transcript content to analyze
+        if has_transcript_content?(meeting) do
         prompt = """
         You are an AI assistant that extracts contact information updates from meeting transcripts.
 
@@ -91,14 +90,24 @@ defmodule SocialScribe.AIContentGenerator do
         #{meeting_prompt}
         """
 
-        case call_gemini(prompt) do
+        case call_gemini(prompt, temperature: 0) do
           {:ok, response} ->
             parse_hubspot_suggestions(response)
 
           {:error, reason} ->
             {:error, reason}
         end
+        else
+          {:ok, []}
+        end
     end
+  end
+
+  defp has_transcript_content?(meeting) do
+    transcript = Map.get(meeting, :meeting_transcript)
+    content = transcript && Map.get(transcript, :content)
+    data = content && Map.get(content, "data")
+    is_list(data) and data != []
   end
 
   defp parse_hubspot_suggestions(response) do
@@ -136,7 +145,7 @@ defmodule SocialScribe.AIContentGenerator do
     end
   end
 
-  defp call_gemini(prompt_text) do
+  defp call_gemini(prompt_text, opts \\ []) do
     api_key = Application.get_env(:social_scribe, :gemini_api_key)
 
     if is_nil(api_key) or api_key == "" do
@@ -144,13 +153,15 @@ defmodule SocialScribe.AIContentGenerator do
     else
       path = "/#{@gemini_model}:generateContent?key=#{api_key}"
 
-      payload = %{
-        contents: [
-          %{
-            parts: [%{text: prompt_text}]
-          }
-        ]
-      }
+      payload =
+        %{
+          contents: [
+            %{
+              parts: [%{text: prompt_text}]
+            }
+          ]
+        }
+        |> maybe_add_generation_config(opts)
 
       case Tesla.post(client(), path, payload) do
         {:ok, %Tesla.Env{status: 200, body: body}} ->
@@ -174,6 +185,13 @@ defmodule SocialScribe.AIContentGenerator do
         {:error, reason} ->
           {:error, {:http_error, reason}}
       end
+    end
+  end
+
+  defp maybe_add_generation_config(payload, opts) do
+    case Keyword.get(opts, :temperature) do
+      nil -> payload
+      temp -> Map.put(payload, :generationConfig, %{temperature: temp})
     end
   end
 

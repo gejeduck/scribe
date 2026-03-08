@@ -33,6 +33,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
     else
       crm_credentials = Accounts.list_user_crm_credentials(socket.assigns.current_user.id)
       hubspot_credential = Accounts.get_user_hubspot_credential(socket.assigns.current_user.id)
+      salesforce_credential = Accounts.get_user_crm_credential(socket.assigns.current_user.id, "salesforce")
 
       socket =
         socket
@@ -41,6 +42,7 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         |> assign(:automation_results, automation_results)
         |> assign(:user_has_automations, user_has_automations)
         |> assign(:crm_credentials, crm_credentials)
+        |> assign(:salesforce_credential, salesforce_credential)
         |> assign(:crm_credential, nil)
         |> assign(:crm_provider, nil)
         |> assign(:hubspot_credential, hubspot_credential)
@@ -156,7 +158,8 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   @impl true
   def handle_info({:apply_hubspot_updates, updates, contact, credential}, socket) do
-    case CrmApi.update_contact(credential, contact.id, updates) do
+    contact_id = contact[:id] || contact["id"]
+    case CrmApi.update_contact(credential, contact_id, updates) do
       {:ok, _updated_contact} ->
         socket =
           socket
@@ -179,6 +182,56 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   defp normalize_contact(contact) do
     # Contact is already formatted with atom keys from HubspotApi.format_contact
     contact
+  end
+
+  attr :provider, :string, required: true
+  attr :meeting, :map, required: true
+
+  defp crm_update_button(assigns) do
+    provider = assigns.provider
+    label = CrmProvider.label_for(provider)
+    patch = ~p"/dashboard/meetings/#{assigns.meeting}/crm/#{provider}"
+
+    {button_class, icon} =
+      case provider do
+        "hubspot" ->
+          {"inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-500 hover:bg-orange-600 transition-colors",
+           ~H"""
+           <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+             <path d="M18.72 14.76c.35-.85.54-1.76.54-2.76 0-.72-.11-1.41-.3-2.05-.65.15-1.33.23-2.04.23A9.07 9.07 0 0112 9.9a8.963 8.963 0 01-4.92.28c-.2.64-.3 1.33-.3 2.05 0 1 .19 1.91.54 2.76 1.34-.5 2.75-.79 4.18-.79s2.84.29 4.22.79M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0-14c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3" />
+           </svg>
+           """}
+
+        "salesforce" ->
+          {"inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-[#00a1e0] hover:bg-[#0176d3] transition-colors",
+           ~H"""
+           <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+             <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+           </svg>
+           """}
+
+        _ ->
+          {"inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors",
+           ~H"""
+           <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+             <path d="M18.72 14.76c.35-.85.54-1.76.54-2.76 0-.72-.11-1.41-.3-2.05-.65.15-1.33.23-2.04.23A9.07 9.07 0 0112 9.9a8.963 8.963 0 01-4.92.28c-.2.64-.3 1.33-.3 2.05 0 1 .19 1.91.54 2.76 1.34-.5 2.75-.79 4.18-.79s2.84.29 4.22.79M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0-14c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3" />
+           </svg>
+           """}
+      end
+
+    assigns =
+      assigns
+      |> assign(:patch, patch)
+      |> assign(:label, label)
+      |> assign(:button_class, button_class)
+      |> assign(:icon, icon)
+
+    ~H"""
+    <.link patch={@patch} class={@button_class}>
+      {@icon}
+      Update {@label} Contact
+    </.link>
+    """
   end
 
   defp format_duration(nil), do: "N/A"

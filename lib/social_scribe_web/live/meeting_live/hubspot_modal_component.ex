@@ -16,8 +16,7 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
       <div>
         <h2 id={"#{@modal_id}-title"} class="text-xl font-medium tracking-tight text-slate-900">Update in {@crm_label}</h2>
         <p id={"#{@modal_id}-description"} class="mt-2 text-base font-light leading-7 text-slate-500">
-          Here are suggested updates to sync with your integrations based on this
-          <span class="block">meeting</span>
+          Select a contact to see AI-suggested field updates extracted from the meeting transcript.
         </p>
       </div>
 
@@ -38,6 +37,10 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
           myself={@myself}
           patch={@patch}
           crm_label={@crm_label}
+          meeting={@meeting}
+          error={@error}
+          field_errors={@field_errors}
+          collapsed_fields={@collapsed_fields}
         />
       <% end %>
     </div>
@@ -49,33 +52,48 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
   attr :myself, :any, required: true
   attr :patch, :string, required: true
   attr :crm_label, :string, default: "CRM"
+  attr :meeting, :map, default: nil
+  attr :error, :string, default: nil
+  attr :field_errors, :map, default: %{}
+  attr :collapsed_fields, :any, default: MapSet.new()
 
   defp suggestions_section(assigns) do
-    assigns = assign(assigns, :selected_count, Enum.count(assigns.suggestions, & &1.apply))
+    has_transcript = has_transcript_content?(assigns.meeting)
+    assigns =
+      assigns
+      |> assign(:selected_count, Enum.count(assigns.suggestions, & &1.apply))
+      |> assign(:has_transcript, has_transcript)
 
     ~H"""
     <div class="space-y-4">
       <%= if @loading do %>
         <div class="text-center py-8 text-slate-500">
           <.icon name="hero-arrow-path" class="h-6 w-6 animate-spin mx-auto mb-2" />
-          <p>Generating suggestions...</p>
+          <p>Analyzing transcript with AI...</p>
         </div>
       <% else %>
         <%= if Enum.empty?(@suggestions) do %>
           <.empty_state
-            message="No update suggestions found from this meeting."
-            submessage="The AI didn't detect any new contact information in the transcript."
+            message="No CRM field updates suggested from transcript."
+            submessage={if @has_transcript, do: "The AI didn't find any contact information (phone, email, company, etc.) mentioned in the meeting transcript.", else: "This meeting doesn't have a transcript yet. AI suggestions require a transcript."}
           />
         <% else %>
+          <.inline_error :if={@error} message={@error} class="mb-4" />
           <form phx-submit="apply_updates" phx-change="toggle_suggestion" phx-target={@myself}>
             <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-              <.suggestion_card :for={suggestion <- @suggestions} suggestion={suggestion} />
+              <.suggestion_card
+                :for={suggestion <- @suggestions}
+                suggestion={suggestion}
+                field_error={Map.get(@field_errors, suggestion.field)}
+                expanded={!MapSet.member?(@collapsed_fields, suggestion.field)}
+                target={@myself}
+              />
             </div>
 
             <.modal_footer
               cancel_patch={@patch}
               submit_text={"Update #{@crm_label}"}
-              submit_class="bg-hubspot-button hover:bg-hubspot-button-hover"
+              submit_class="bg-green-600 hover:bg-green-700"
               disabled={@selected_count == 0}
               loading={@loading}
               loading_text="Updating..."
@@ -103,8 +121,53 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
       |> assign_new(:searching, fn -> false end)
       |> assign_new(:dropdown_open, fn -> false end)
       |> assign_new(:error, fn -> nil end)
+      |> assign_new(:field_errors, fn -> %{} end)
+      |> assign_new(:collapsed_fields, fn -> MapSet.new() end)
 
     {:ok, socket}
+  end
+
+  defp validate_crm_fields(updates) do
+    field_errors =
+      updates
+      |> Enum.reduce(%{}, fn
+        {"email", value}, acc ->
+          if valid_email?(value), do: acc, else: Map.put(acc, "email", "Invalid email address")
+
+        {"phone", value}, acc ->
+          if valid_phone?(value), do: acc, else: Map.put(acc, "phone", "Invalid phone number")
+
+        {"mobilephone", value}, acc ->
+          if valid_phone?(value), do: acc, else: Map.put(acc, "mobilephone", "Invalid phone number")
+
+        {_field, _value}, acc ->
+          acc
+      end)
+
+    if map_size(field_errors) > 0 do
+      {:error, field_errors}
+    else
+      :ok
+    end
+  end
+
+  defp valid_email?(""), do: true
+  defp valid_email?(nil), do: true
+
+  defp valid_email?(value) when is_binary(value) do
+    value = String.trim(value)
+    # Must have @ and domain with dot, no spaces
+    value =~ ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  end
+
+  defp valid_phone?(""), do: true
+  defp valid_phone?(nil), do: true
+
+  defp valid_phone?(value) when is_binary(value) do
+    value = String.trim(value)
+    digit_count = value |> String.replace(~r/\D/, "") |> String.length()
+    # At least 5 digits, and must not look like spoken email (e.g. "James at other")
+    digit_count >= 5 and not String.contains?(String.downcase(value), " at ")
   end
 
   defp maybe_select_all_suggestions(socket, %{suggestions: suggestions}) when is_list(suggestions) do
@@ -186,6 +249,19 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
   end
 
   @impl true
+  def handle_event("toggle_suggestion_details", %{"field" => field}, socket) do
+    collapsed = socket.assigns.collapsed_fields
+    new_collapsed =
+      if MapSet.member?(collapsed, field) do
+        MapSet.delete(collapsed, field)
+      else
+        MapSet.put(collapsed, field)
+      end
+
+    {:noreply, assign(socket, collapsed_fields: new_collapsed)}
+  end
+
+  @impl true
   def handle_event("toggle_suggestion", params, socket) do
     applied_fields = Map.get(params, "apply", %{})
     values = Map.get(params, "values", %{})
@@ -204,26 +280,46 @@ defmodule SocialScribeWeb.MeetingLive.HubspotModalComponent do
         %{suggestion | apply: apply?}
       end)
 
-    {:noreply, assign(socket, suggestions: updated_suggestions)}
+    # Clear validation errors when user edits
+    {:noreply, assign(socket, suggestions: updated_suggestions, error: nil, field_errors: %{})}
   end
 
   @impl true
   def handle_event("apply_updates", %{"apply" => selected, "values" => values}, socket) do
-    socket = assign(socket, loading: true, error: nil)
-
     updates =
       selected
       |> Map.keys()
       |> Enum.reduce(%{}, fn field, acc ->
-        Map.put(acc, field, Map.get(values, field, ""))
+        Map.put(acc, field, Map.get(values, field, "") |> String.trim())
       end)
 
-    send(self(), {:apply_hubspot_updates, updates, socket.assigns.selected_contact, socket.assigns.credential})
-    {:noreply, socket}
+    case validate_crm_fields(updates) do
+      :ok ->
+        socket = assign(socket, loading: true, error: nil, field_errors: %{})
+        send(self(), {:apply_hubspot_updates, updates, socket.assigns.selected_contact, socket.assigns.credential})
+        {:noreply, socket}
+
+      {:error, field_errors} ->
+        {:noreply,
+         assign(socket,
+           loading: false,
+           error: "Please fix the validation errors below.",
+           field_errors: field_errors
+         )}
+    end
   end
 
   @impl true
   def handle_event("apply_updates", _params, socket) do
     {:noreply, assign(socket, error: "Please select at least one field to update")}
+  end
+
+  defp has_transcript_content?(nil), do: false
+
+  defp has_transcript_content?(meeting) do
+    transcript = Map.get(meeting, :meeting_transcript)
+    content = transcript && Map.get(transcript, :content)
+    data = content && Map.get(content, "data")
+    is_list(data) and data != []
   end
 end

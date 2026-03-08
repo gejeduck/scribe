@@ -162,22 +162,116 @@ defmodule SocialScribe.SalesforceApi do
       "city" => "MailingCity",
       "state" => "MailingState",
       "zip" => "MailingPostalCode",
-      "country" => "MailingCountry"
+      "country" => "MailingCountry",
+      "website" => "Website"
     }
 
     Enum.reduce(updates, %{}, fn
       {k, v}, acc when is_atom(k) ->
         key = to_string(k)
-        case Map.get(mapping, key, key) do
-          sf_field when is_binary(sf_field) -> Map.put(acc, sf_field, v)
-        end
+        put_if_mapped(acc, mapping, key, v)
 
       {k, v}, acc when is_binary(k) ->
-        case Map.get(mapping, k, k) do
-          sf_field when is_binary(sf_field) -> Map.put(acc, sf_field, v)
-        end
+        put_if_mapped(acc, mapping, k, v)
     end)
   end
+
+  defp put_if_mapped(acc, mapping, key, value) do
+    case Map.get(mapping, key) do
+      nil ->
+        acc
+
+      "MailingCountry" ->
+        case normalize_country_for_salesforce(value) do
+          nil -> acc
+          normalized -> Map.put(acc, "MailingCountry", normalized)
+        end
+
+      sf_field ->
+        Map.put(acc, sf_field, value)
+    end
+  end
+
+  # Normalizes country values to Salesforce's standard picklist format.
+  # Skips values that can't be confidently mapped to avoid FIELD_INTEGRITY_EXCEPTION.
+  defp normalize_country_for_salesforce(nil), do: nil
+  defp normalize_country_for_salesforce(""), do: nil
+
+  defp normalize_country_for_salesforce(value) when is_binary(value) do
+    normalized = String.trim(value) |> String.downcase()
+
+    # Common variations -> standard Salesforce country names
+    country_map = %{
+      "usa" => "United States",
+      "u.s.a." => "United States",
+      "u.s.a" => "United States",
+      "us" => "United States",
+      "u.s." => "United States",
+      "united states of america" => "United States",
+      "united states" => "United States",
+      "uk" => "United Kingdom",
+      "u.k." => "United Kingdom",
+      "united kingdom" => "United Kingdom",
+      "great britain" => "United Kingdom",
+      "britain" => "United Kingdom",
+      "canada" => "Canada",
+      "ca" => "Canada",
+      "australia" => "Australia",
+      "au" => "Australia",
+      "germany" => "Germany",
+      "de" => "Germany",
+      "france" => "France",
+      "fr" => "France",
+      "india" => "India",
+      "in" => "India",
+      "china" => "China",
+      "cn" => "China",
+      "japan" => "Japan",
+      "jp" => "Japan",
+      "mexico" => "Mexico",
+      "mx" => "Mexico",
+      "brazil" => "Brazil",
+      "br" => "Brazil",
+      "ireland" => "Ireland",
+      "ie" => "Ireland",
+      "italy" => "Italy",
+      "it" => "Italy",
+      "spain" => "Spain",
+      "es" => "Spain",
+      "netherlands" => "Netherlands",
+      "nl" => "Netherlands",
+      "singapore" => "Singapore",
+      "sg" => "Singapore",
+      "south korea" => "South Korea",
+      "korea" => "South Korea",
+      "kr" => "South Korea"
+    }
+
+    case Map.get(country_map, normalized) do
+      nil ->
+        # Extract country from "City, Country" or "City. Country" patterns (e.g. "San Francisco. USA")
+        extracted =
+          normalized
+          |> String.split(~r/[,.]/, parts: 2)
+          |> List.last()
+          |> case do
+            nil -> nil
+            part -> String.trim(part) |> String.downcase()
+          end
+
+        if extracted && extracted != normalized do
+          Map.get(country_map, extracted)
+        else
+          # Unknown value - skip to avoid FIELD_INTEGRITY_EXCEPTION
+          nil
+        end
+
+      mapped ->
+        mapped
+    end
+  end
+
+  defp normalize_country_for_salesforce(_), do: nil
 
   defp format_contact(%{"Id" => id} = record) do
     %{
