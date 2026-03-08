@@ -1,9 +1,9 @@
-defmodule SocialScribe.HubspotSuggestionsTest do
+defmodule SocialScribe.CrmSuggestionsTest do
   use SocialScribe.DataCase
 
   import Mox
 
-  alias SocialScribe.HubspotSuggestions
+  alias SocialScribe.CrmSuggestions
 
   setup :verify_on_exit!
 
@@ -22,7 +22,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
         {:ok, ai_suggestions}
       end)
 
-      assert {:ok, suggestions} = HubspotSuggestions.generate_suggestions_from_meeting(meeting)
+      assert {:ok, suggestions} = CrmSuggestions.generate_suggestions_from_meeting(meeting)
 
       assert length(suggestions) == 3
 
@@ -50,7 +50,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
         {:error, :rate_limited}
       end)
 
-      assert {:error, :rate_limited} = HubspotSuggestions.generate_suggestions_from_meeting(meeting)
+      assert {:error, :rate_limited} = CrmSuggestions.generate_suggestions_from_meeting(meeting)
     end
 
     test "preserves optional context and timestamp from AI response" do
@@ -62,7 +62,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
       SocialScribe.AIContentGeneratorMock
       |> expect(:generate_hubspot_suggestions, fn _ -> {:ok, ai_suggestions} end)
 
-      assert {:ok, [suggestion]} = HubspotSuggestions.generate_suggestions_from_meeting(meeting)
+      assert {:ok, [suggestion]} = CrmSuggestions.generate_suggestions_from_meeting(meeting)
       assert suggestion.context == "From transcript"
       assert suggestion.timestamp == "0:45"
     end
@@ -74,7 +74,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
       SocialScribe.AIContentGeneratorMock
       |> expect(:generate_hubspot_suggestions, fn _ -> {:ok, ai_suggestions} end)
 
-      assert {:ok, [suggestion]} = HubspotSuggestions.generate_suggestions_from_meeting(meeting)
+      assert {:ok, [suggestion]} = CrmSuggestions.generate_suggestions_from_meeting(meeting)
       assert suggestion.label == "custom_field"
     end
   end
@@ -109,7 +109,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
         email: "test@example.com"
       }
 
-      result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+      result = CrmSuggestions.merge_with_contact(suggestions, contact)
 
       # Only phone should remain since company already matches
       assert length(result) == 1
@@ -135,7 +135,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
         email: "test@example.com"
       }
 
-      result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+      result = CrmSuggestions.merge_with_contact(suggestions, contact)
 
       assert result == []
     end
@@ -143,7 +143,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
     test "handles empty suggestions list" do
       contact = %{id: "123", email: "test@example.com"}
 
-      result = HubspotSuggestions.merge_with_contact([], contact)
+      result = CrmSuggestions.merge_with_contact([], contact)
 
       assert result == []
     end
@@ -165,7 +165,7 @@ defmodule SocialScribe.HubspotSuggestionsTest do
 
       contact = %{id: "123", phone: nil}
 
-      result = HubspotSuggestions.merge_with_contact(suggestions, contact)
+      result = CrmSuggestions.merge_with_contact(suggestions, contact)
 
       assert hd(result).label == "Phone"
     end

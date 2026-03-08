@@ -136,7 +136,7 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
 
       # After selecting contact, suggestions should be generated
       # Modal should still be present
-      assert has_element?(view, "#hubspot-modal-wrapper")
+      assert has_element?(view, "#crm-modal-wrapper")
     end
 
     test "contact dropdown shows search results", %{conn: conn, meeting: meeting} do

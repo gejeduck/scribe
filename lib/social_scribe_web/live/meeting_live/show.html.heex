@@ -167,17 +167,17 @@
   />
 </.modal>
 
-<.hubspot_modal
+<.crm_modal
   :if={@live_action in [:hubspot, :crm] && @crm_credential}
-  id="hubspot-modal-wrapper"
+  id="crm-modal-wrapper"
   show
   on_cancel={JS.patch(~p"/dashboard/meetings/#{@meeting}")}
 >
   <.live_component
-    module={SocialScribeWeb.MeetingLive.HubspotModalComponent}
-    id="hubspot-modal"
+    module={SocialScribeWeb.MeetingLive.CrmModalComponent}
+    id="crm-modal"
     meeting={@meeting}
     credential={@crm_credential}
-    modal_id="hubspot-modal-wrapper"
+    modal_id="crm-modal-wrapper"
   />
-</.hubspot_modal>
+</.crm_modal>

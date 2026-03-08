@@ -66,4 +66,28 @@ defmodule SocialScribe.CrmApiBehaviour do
       "twitter_handle"
     ]
   end
+
+  @doc """
+  Human-readable labels for canonical CRM fields.
+  Used when displaying suggestions in the UI.
+  """
+  def field_labels do
+    %{
+      "firstname" => "First Name",
+      "lastname" => "Last Name",
+      "email" => "Email",
+      "phone" => "Phone",
+      "mobilephone" => "Mobile Phone",
+      "company" => "Company",
+      "jobtitle" => "Job Title",
+      "address" => "Address",
+      "city" => "City",
+      "state" => "State",
+      "zip" => "ZIP Code",
+      "country" => "Country",
+      "website" => "Website",
+      "linkedin_url" => "LinkedIn",
+      "twitter_handle" => "Twitter"
+    }
+  end
 end

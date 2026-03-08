@@ -3,14 +3,14 @@ defmodule SocialScribeWeb.MeetingLive.Show do
 
   import SocialScribeWeb.PlatformLogo
   import SocialScribeWeb.ClipboardButton
-  import SocialScribeWeb.ModalComponents, only: [hubspot_modal: 1]
+  import SocialScribeWeb.ModalComponents, only: [crm_modal: 1]
 
   alias SocialScribe.Meetings
   alias SocialScribe.Automations
   alias SocialScribe.Accounts
   alias SocialScribe.CrmApi
   alias SocialScribe.CrmProvider
-  alias SocialScribe.HubspotSuggestions
+  alias SocialScribe.CrmSuggestions
 
   @impl true
   def mount(%{"id" => meeting_id}, _session, socket) do
@@ -112,18 +112,18 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   end
 
   @impl true
-  def handle_info({:hubspot_search, query, credential}, socket) do
+  def handle_info({:crm_contact_search, query, credential}, socket) do
     case CrmApi.search_contacts(credential, query) do
       {:ok, contacts} ->
-        send_update(SocialScribeWeb.MeetingLive.HubspotModalComponent,
-          id: "hubspot-modal",
+        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
+          id: "crm-modal",
           contacts: contacts,
           searching: false
         )
 
       {:error, reason} ->
-        send_update(SocialScribeWeb.MeetingLive.HubspotModalComponent,
-          id: "hubspot-modal",
+        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
+          id: "crm-modal",
           error: "Failed to search contacts: #{inspect(reason)}",
           searching: false
         )
@@ -133,21 +133,21 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   end
 
   @impl true
-  def handle_info({:generate_suggestions, contact, meeting, _credential}, socket) do
-    case HubspotSuggestions.generate_suggestions_from_meeting(meeting) do
+  def handle_info({:generate_crm_suggestions, contact, meeting, _credential}, socket) do
+    case CrmSuggestions.generate_suggestions_from_meeting(meeting) do
       {:ok, suggestions} ->
-        merged = HubspotSuggestions.merge_with_contact(suggestions, normalize_contact(contact))
+        merged = CrmSuggestions.merge_with_contact(suggestions, normalize_contact(contact))
 
-        send_update(SocialScribeWeb.MeetingLive.HubspotModalComponent,
-          id: "hubspot-modal",
+        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
+          id: "crm-modal",
           step: :suggestions,
           suggestions: merged,
           loading: false
         )
 
       {:error, reason} ->
-        send_update(SocialScribeWeb.MeetingLive.HubspotModalComponent,
-          id: "hubspot-modal",
+        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
+          id: "crm-modal",
           error: "Failed to generate suggestions: #{inspect(reason)}",
           loading: false
         )
@@ -157,8 +157,9 @@ defmodule SocialScribeWeb.MeetingLive.Show do
   end
 
   @impl true
-  def handle_info({:apply_hubspot_updates, updates, contact, credential}, socket) do
+  def handle_info({:apply_crm_updates, updates, contact, credential}, socket) do
     contact_id = contact[:id] || contact["id"]
+
     case CrmApi.update_contact(credential, contact_id, updates) do
       {:ok, _updated_contact} ->
         socket =
@@ -169,8 +170,8 @@ defmodule SocialScribeWeb.MeetingLive.Show do
         {:noreply, socket}
 
       {:error, reason} ->
-        send_update(SocialScribeWeb.MeetingLive.HubspotModalComponent,
-          id: "hubspot-modal",
+        send_update(SocialScribeWeb.MeetingLive.CrmModalComponent,
+          id: "crm-modal",
           error: "Failed to update contact: #{inspect(reason)}",
           loading: false
         )
