@@ -169,6 +169,211 @@ defmodule SocialScribeWeb.HubspotModalMoxTest do
       assert html =~ "Test User"
       assert html =~ "test@example.com"
     end
+
+    test "toggle_suggestion_details expands and collapses suggestion details", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "123",
+        firstname: "John",
+        lastname: "Doe",
+        email: "john@example.com",
+        phone: nil,
+        company: "Acme",
+        display_name: "John Doe"
+      }
+
+      mock_suggestions = [
+        %{field: "phone", value: "555-1234", context: "Mentioned"},
+        %{field: "company", value: "Acme Corp", context: "Works there"}
+      ]
+
+      SocialScribe.HubspotApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_hubspot_suggestions, fn _meeting -> {:ok, mock_suggestions} end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "John"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='123']")
+      |> render_click()
+
+      :timer.sleep(500)
+
+      # Initially expanded: shows "Hide details"
+      html = render(view)
+      assert html =~ "Hide details"
+
+      # Collapse first suggestion (phone)
+      view
+      |> element("button[phx-click='toggle_suggestion_details'][phx-value-field='phone']")
+      |> render_click()
+
+      html = render(view)
+      # Should have "Show details" for collapsed phone
+      assert html =~ "Show details"
+
+      # Expand again
+      view
+      |> element("button[phx-click='toggle_suggestion_details'][phx-value-field='phone']")
+      |> render_click()
+
+      html = render(view)
+      assert html =~ "Hide details"
+    end
+
+    test "apply_updates shows validation error for invalid email", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      {view, _html} = open_modal_with_suggestions(conn, meeting, [
+        %{field: "email", value: "bad-email", context: "From transcript"}
+      ])
+
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_submit(%{
+        "apply" => %{"email" => "1"},
+        "values" => %{"email" => "bad-email"}
+      })
+
+      html = render(view)
+      assert html =~ "Please fix the validation errors below"
+      assert html =~ "Invalid email address"
+    end
+
+    test "apply_updates shows validation error for invalid phone", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      {view, _html} = open_modal_with_suggestions(conn, meeting, [
+        %{field: "phone", value: "123", context: "From transcript"}
+      ])
+
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_submit(%{
+        "apply" => %{"phone" => "1"},
+        "values" => %{"phone" => "123"}
+      })
+
+      html = render(view)
+      assert html =~ "Please fix the validation errors below"
+      assert html =~ "Invalid phone number"
+    end
+
+    test "submit button is disabled when no fields selected", %{conn: conn, meeting: meeting} do
+      # Use value that differs from contact (company: "Acme") so suggestion survives merge
+      {view, _html} = open_modal_with_suggestions(conn, meeting, [
+        %{field: "company", value: "Acme Corp", context: "From transcript"}
+      ])
+
+      # Uncheck the company field via phx-change
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_change(%{"apply" => %{}, "values" => %{"company" => "Acme Corp"}})
+
+      html = render(view)
+      # Submit button should be disabled when selected_count is 0
+      assert html =~ "disabled"
+    end
+
+    test "apply_updates succeeds with valid data and updates contact", %{
+      conn: conn,
+      meeting: meeting
+    } do
+      mock_contact = %{
+        id: "123",
+        firstname: "John",
+        lastname: "Doe",
+        email: "john@example.com",
+        phone: nil,
+        company: "Acme",
+        display_name: "John Doe"
+      }
+
+      SocialScribe.HubspotApiMock
+      |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+
+      SocialScribe.AIContentGeneratorMock
+      |> expect(:generate_hubspot_suggestions, fn _meeting ->
+        {:ok, [%{field: "phone", value: "555-1234", context: "Mentioned"}]}
+      end)
+
+      SocialScribe.HubspotApiMock
+      |> expect(:update_contact, fn _credential, contact_id, updates ->
+        assert contact_id == "123"
+        assert updates == %{"phone" => "555-1234"}
+        {:ok, %{id: "123", phone: "555-1234"}}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+
+      view
+      |> element("input[phx-keyup='contact_search']")
+      |> render_keyup(%{"value" => "John"})
+
+      :timer.sleep(200)
+
+      view
+      |> element("button[phx-click='select_contact'][phx-value-id='123']")
+      |> render_click()
+
+      :timer.sleep(500)
+
+      view
+      |> element("form[phx-submit='apply_updates']")
+      |> render_submit(%{
+        "apply" => %{"phone" => "1"},
+        "values" => %{"phone" => "555-1234"}
+      })
+
+      assert_patch(view, ~p"/dashboard/meetings/#{meeting.id}")
+    end
+  end
+
+  defp open_modal_with_suggestions(conn, meeting, mock_suggestions) do
+    mock_contact = %{
+      id: "123",
+      firstname: "John",
+      lastname: "Doe",
+      email: "john@example.com",
+      phone: nil,
+      company: "Acme",
+      display_name: "John Doe"
+    }
+
+    SocialScribe.HubspotApiMock
+    |> expect(:search_contacts, fn _credential, _query -> {:ok, [mock_contact]} end)
+
+    SocialScribe.AIContentGeneratorMock
+    |> expect(:generate_hubspot_suggestions, fn _meeting -> {:ok, mock_suggestions} end)
+
+    {:ok, view, _html} = live(conn, ~p"/dashboard/meetings/#{meeting.id}/hubspot")
+
+    view
+    |> element("input[phx-keyup='contact_search']")
+    |> render_keyup(%{"value" => "John"})
+
+    :timer.sleep(200)
+
+    view
+    |> element("button[phx-click='select_contact'][phx-value-id='123']")
+    |> render_click()
+
+    :timer.sleep(500)
+
+    html = render(view)
+    {view, html}
   end
 
   describe "HubSpot API behavior delegation" do
