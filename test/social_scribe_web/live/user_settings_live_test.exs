@@ -20,6 +20,23 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
 
       assert has_element?(view, "h1", "User Settings")
       assert has_element?(view, "h2", "Connected Google Accounts")
+      assert has_element?(view, "a", "Connect Google Account")
+    end
+
+    test "shows Connect another Google Account when user has connected accounts", %{conn: conn, user: user} do
+      credential_attrs = %{
+        user_id: user.id,
+        provider: "google",
+        uid: "google-uid-123",
+        token: "test-token",
+        expires_at: DateTime.utc_now() |> DateTime.add(3600, :second),
+        email: "linked_account@example.com"
+      }
+
+      _credential = user_credential_fixture(credential_attrs)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard/settings")
+
       assert has_element?(view, "a", "Connect another Google Account")
     end
 
@@ -29,14 +46,12 @@ defmodule SocialScribeWeb.UserSettingsLiveTest do
     end
 
     test "displays connected Google accounts", %{conn: conn, user: user} do
-      # Create a Google credential for the user
-      # Assuming UserCredential has an :email field for display purposes.
-      # If not, you might display the UID or another identifier.
       credential_attrs = %{
         user_id: user.id,
         provider: "google",
         uid: "google-uid-123",
         token: "test-token",
+        expires_at: DateTime.utc_now() |> DateTime.add(3600, :second),
         email: "linked_account@example.com"
       }
 

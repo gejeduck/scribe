@@ -93,6 +93,34 @@ defmodule SocialScribeWeb.UserSettingsLive do
   end
 
   @impl true
+  def handle_event("disconnect_crm", %{"credential_id" => id}, socket) do
+    credential = Accounts.get_user_credential!(id)
+
+    if credential.user_id == socket.assigns.current_user.id do
+      case Accounts.delete_user_credential(credential) do
+        {:ok, _} ->
+          crm_providers =
+            CrmProvider.known_providers()
+            |> Enum.map(fn provider ->
+              accounts = Accounts.list_user_credentials(socket.assigns.current_user, provider: provider)
+              %{provider: provider, label: CrmProvider.label_for(provider), accounts: accounts}
+            end)
+
+          {:noreply,
+           socket
+           |> assign(:crm_providers, crm_providers)
+           |> put_flash(:info, "Account disconnected successfully")}
+
+        {:error, _} ->
+          {:noreply,
+           put_flash(socket, :error, "Failed to disconnect account")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    end
+  end
+
+  @impl true
   def handle_event("select_facebook_page", %{"facebook_page" => facebook_page}, socket) do
     facebook_page_credential = Accounts.get_facebook_page_credential!(facebook_page)
 
