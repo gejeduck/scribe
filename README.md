@@ -81,6 +81,58 @@ Social Scribe is a powerful Elixir and Phoenix LiveView application designed to 
 
 ---
 
+## 🏗 Architecture: CRM Behaviour Pattern
+
+The CRM integration uses a **behaviour + delegation** pattern to support multiple providers (HubSpot, Salesforce) through a single API surface.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CrmModalComponent (LiveView)                                   │
+│  CrmSuggestions (AI → canonical format)                         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  CrmApi (unified facade)                                        │
+│  • search_contacts/2   • get_contact/2                          │
+│  • update_contact/3    • apply_updates/3                        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+              resolve_impl(credential.provider)
+                             │
+         ┌───────────────────┴───────────────────┐
+         ▼                                       ▼
+┌─────────────────────┐               ┌─────────────────────┐
+│  HubspotApi         │               │  SalesforceApi      │
+│  @behaviour         │               │  @behaviour         │
+│  CrmApiBehaviour    │               │  CrmApiBehaviour    │
+└─────────────────────┘               └─────────────────────┘
+```
+
+### Components
+
+| Module | Role |
+|--------|------|
+| **CrmApiBehaviour** | Defines the contract: `search_contacts`, `get_contact`, `update_contact`, `apply_updates`. Also provides `canonical_fields/0` and `field_labels/0` for shared field names. |
+| **CrmApi** | Facade. Receives `UserCredential`, resolves implementation via `CrmProvider.impl_for/1`, delegates. Never calls provider APIs directly. |
+| **CrmProvider** | Registry mapping provider strings (`"hubspot"`, `"salesforce"`) to implementation modules. Supports `:crm_provider_overrides` in test for mocks. |
+| **HubspotApi** / **SalesforceApi** | Implement `CrmApiBehaviour`. Map canonical field names to provider-specific fields. Return contacts in normalized format (atom keys). |
+
+### Data Flow
+
+1. **Canonical fields** – All providers use the same field names (`firstname`, `email`, `phone`, etc.). Implementations map to provider-specific fields (e.g. HubSpot `hs_linkedin_url`, Salesforce `MailingCity`).
+2. **Credential-based dispatch** – `CrmApi` uses `credential.provider` to choose the implementation. No `case provider` in application code.
+3. **Test overrides** – `config :social_scribe, :crm_provider_overrides, %{"hubspot" => HubspotApiMock}` swaps real implementations in tests.
+
+### Adding a New CRM Provider
+
+1. Implement `CrmApiBehaviour` (e.g. `PipedriveApi`).
+2. Add to `CrmProvider.@providers`: `"pipedrive" => %{module: PipedriveApi, label: "Pipedrive"}`.
+3. Add OAuth strategy and credential storage.
+4. No changes to `CrmApi`, `CrmModalComponent`, or `CrmSuggestions`.
+
+---
+
 ## 🚀 Getting Started
 
 Follow these steps to get SocialScribe running on your local machine.
