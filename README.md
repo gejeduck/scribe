@@ -73,7 +73,7 @@ Social Scribe is a powerful Elixir and Phoenix LiveView application designed to 
 * **Backend:** Elixir, Phoenix LiveView
 * **Database:** PostgreSQL
 * **Background Jobs:** Oban
-* **Authentication:** Ueberauth (for Google, LinkedIn, Facebook, HubSpot OAuth)
+* **Authentication:** Ueberauth (Google, LinkedIn, Facebook, HubSpot, Salesforce OAuth)
 * **Meeting Transcription:** Recall.ai API
 * **AI Content Generation:** Google Gemini API (Flash models)
 * **Frontend:** Tailwind CSS, Heroicons (via `tailwind.config.js`)
@@ -113,33 +113,46 @@ Follow these steps to get SocialScribe running on your local machine.
 
 3.  **Configure Environment Variables:**
     You'll need to set up several API keys and OAuth credentials.
-    * Copy the example environment file (if one is provided, e.g., `.env.example`) to `.env`.
-    * Edit the `.env` file (or set environment variables directly) with your actual credentials:
+    * Create a `.env` file in the project root (or set environment variables directly).
+    * Load env vars before starting: `source .env && mix phx.server`
+    * Edit with your actual credentials:
+
+    **Core:**
         * `GOOGLE_CLIENT_ID`: Your Google OAuth Client ID.
         * `GOOGLE_CLIENT_SECRET`: Your Google OAuth Client Secret.
         * `GOOGLE_REDIRECT_URI`: `"http://localhost:4000/auth/google/callback"`
-        * `RECALL_API_KEY`: Your Recall.ai API Key (as provided for the challenge).
+        * `RECALL_API_KEY`: Your Recall.ai API Key.
+        * `RECALL_REGION`: (optional) Recall.ai region, e.g. `"eu-central-1"`. Omit for default.
         * `GEMINI_API_KEY`: Your Google Gemini API Key.
+
+    **LinkedIn:**
         * `LINKEDIN_CLIENT_ID`: Your LinkedIn App Client ID.
         * `LINKEDIN_CLIENT_SECRET`: Your LinkedIn App Client Secret.
         * `LINKEDIN_REDIRECT_URI`: `"http://localhost:4000/auth/linkedin/callback"`
-        * `FACEBOOK_APP_ID`: Your Facebook App ID.
-        * `FACEBOOK_APP_SECRET`: Your Facebook App Secret.
+
+    **Facebook:**
+        * `FACEBOOK_APP_ID` or `FACEBOOK_CLIENT_ID`: Your Facebook App ID.
+        * `FACEBOOK_APP_SECRET` or `FACEBOOK_CLIENT_SECRET`: Your Facebook App Secret.
         * `FACEBOOK_REDIRECT_URI`: `"http://localhost:4000/auth/facebook/callback"`
+
+    **HubSpot:**
         * `HUBSPOT_CLIENT_ID`: Your HubSpot App Client ID.
         * `HUBSPOT_CLIENT_SECRET`: Your HubSpot App Client Secret.
         * `HUBSPOT_REDIRECT_URI`: `"http://localhost:4000/auth/hubspot/callback"`
+
+    **Salesforce:**
         * `SALESFORCE_CLIENT_ID`: Your Salesforce Connected App Consumer Key.
         * `SALESFORCE_CLIENT_SECRET`: Your Salesforce Connected App Consumer Secret.
-        * `SALESFORCE_SITE`: (optional) `"https://login.salesforce.com"` for production, `"https://test.salesforce.com"` for sandbox.
+        * `SALESFORCE_REDIRECT_URI`: `"http://localhost:4000/auth/salesforce/callback"`
+        * `SALESFORCE_SITE`: (optional) `"https://login.salesforce.com"` for production, `"https://test.salesforce.com"` for sandbox. Defaults to production.
 
 4.  **Start the Phoenix Server:**
     ```bash
-    mix phx.server
+    source .env && mix phx.server
     ```
     Or, to run inside IEx (Interactive Elixir):
     ```bash
-    iex -S mix phx.server
+    source .env && iex -S mix phx.server
     ```
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
@@ -161,45 +174,50 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
 ---
 
-## 🔗 HubSpot Integration
+## 🔗 CRM Integration (HubSpot & Salesforce)
 
-### HubSpot OAuth Integration
+Social Scribe supports updating CRM contacts from meeting transcripts. Both HubSpot and Salesforce use the same UI flow.
 
-* **Custom Ueberauth Strategy:** Implemented in `lib/ueberauth/strategy/hubspot.ex`
-* **OAuth 2.0 Flow:** Handles authorization code flow with HubSpot's `/oauth/authorize` and `/oauth/v1/token` endpoints
-* **Credential Storage:** Credentials stored in `user_credentials` table with `provider: "hubspot"`, including `token`, `refresh_token`, and `expires_at`
-* **Token Refresh:**
-    * `HubspotTokenRefresher` Oban cron worker runs every 5 minutes to proactively refresh tokens expiring within 10 minutes
-    * Internal `with_token_refresh/2` wrapper automatically refreshes expired tokens on API calls and retries the request
-    * Refresh failures are logged; users are prompted to re-authenticate if refresh token is invalid
+### CRM Modal UI
 
-### HubSpot Modal UI
+* **LiveView Component:** `lib/social_scribe_web/live/meeting_live/crm_modal_component.ex`
+* **Contact Search:** Debounced input triggers CRM API search, results displayed in dropdown
+* **AI Suggestions:** Fetched via `CrmSuggestions.generate_suggestions_from_meeting` which calls Gemini with transcript context
+* **Suggestion Cards:** Each card displays field label, current value (strikethrough), suggested value, and context
+* **Selective Updates:** Checkbox per field; "Update" button disabled until at least one field selected
+* **Form Submission:** Batch-updates selected contact properties via `CrmApi.update_contact`
+* **Validation:** Email and phone fields validated before apply via `CrmFieldValidator`
 
-* **LiveView Component:** Located at `lib/social_scribe_web/live/meeting_live/hubspot_modal_component.ex`
-* **Contact Search:** Debounced input triggers HubSpot API search, results displayed in dropdown
-* **AI Suggestions:** Fetched via `HubspotSuggestions.generate_suggestions` which calls Gemini with transcript context
-* **Suggestion Cards:** Each card displays:
-    * Field label
-    * Current value (strikethrough)
-    * Arrow
-    * Suggested value
-    * Timestamp link
-* **Selective Updates:** Checkbox per field allows selective updates; "Update HubSpot" button disabled until at least one field selected
-* **Form Submission:** Batch-updates selected contact properties via `HubspotApi.update_contact`
-* **Click-away Handler:** Closes dropdown without clearing selection
+### HubSpot
 
----
+* **Ueberauth Strategy:** `lib/ueberauth/strategy/hubspot.ex`
+* **OAuth 2.0 Flow:** HubSpot's `/oauth/authorize` and `/oauth/v1/token` endpoints
+* **Token Refresh:** `HubspotTokenRefresher` Oban cron runs every 5 minutes; `with_token_refresh/2` retries on 401
 
-## 🔗 Salesforce Integration
+### Salesforce
 
-### Salesforce OAuth (Connected App)
+* **Ueberauth Strategy:** `lib/ueberauth/strategy/salesforce.ex`
+* **OAuth 2.0 Web Server Flow:** Salesforce's `/services/oauth2/authorize` and `/services/oauth2/token`
+* **Token Refresh:** `SalesforceTokenRefresher` Oban cron runs every 5 minutes
 
-* **Custom Ueberauth Strategy:** Implemented in `lib/ueberauth/strategy/salesforce.ex`
-* **OAuth 2.0 Web Server Flow:** Uses Salesforce's `/services/oauth2/authorize` and `/services/oauth2/token` endpoints
-* **Production vs Sandbox:** Set `SALESFORCE_SITE` to `https://login.salesforce.com` (default) or `https://test.salesforce.com` for sandbox
-* **Connected App Setup:** Create a Connected App in Salesforce Setup → App Manager. Enable OAuth, add callback URL (e.g. `http://localhost:4000/auth/salesforce/callback`), and select scopes: `api`, `id`, `refresh_token`
-* **Credential Storage:** Credentials stored in `user_credentials` table with `provider: "salesforce"`
-* **API Integration:** Salesforce CRM API integration (contact search/update) is planned; OAuth connection is ready for future use
+#### Salesforce Setup Instructions
+
+1. **Create a Connected App**
+   * In Salesforce, go to **Setup** → **Apps** → **App Manager** → **New Connected App**
+   * Enable **OAuth Settings**
+   * **Callback URL:** `http://localhost:4000/auth/salesforce/callback` (dev) or `https://your-domain.com/auth/salesforce/callback` (prod)
+   * **Selected OAuth Scopes:** `Access and manage your data (api)`, `Perform requests on your behalf at any time (refresh_token, offline_access)`, `Access your basic information (id)`
+   * Save and note the **Consumer Key** (→ `SALESFORCE_CLIENT_ID`) and **Consumer Secret** (→ `SALESFORCE_CLIENT_SECRET`)
+
+2. **Environment Variables**
+   * `SALESFORCE_CLIENT_ID`: Consumer Key from the Connected App
+   * `SALESFORCE_CLIENT_SECRET`: Consumer Secret (click "Click to reveal")
+   * `SALESFORCE_REDIRECT_URI`: Must match the Callback URL exactly
+   * `SALESFORCE_SITE`: `https://login.salesforce.com` (production) or `https://test.salesforce.com` (sandbox)
+
+3. **Connect in App**
+   * Go to **Settings** → connect Salesforce
+   * Or from a meeting details page → **Update Salesforce Contact**
 
 ---
 
